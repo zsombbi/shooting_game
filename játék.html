@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: black; /* Háttérszín fekete */
+        }
+
+        .game-element {
+            position: absolute;
+        }
+
+        #player {
+            width: 50px;
+            height: 50px;
+            background-color: red;
+        }
+
+        .bullet {
+            width: 10px;
+            height: 20px;
+            background-color: blue;
+        }
+
+        .enemy {
+            width: 40px;
+            height: 40px;
+            background-color: green;
+        }
+
+        #weapon {
+            width: 5px;
+            height: 30px;
+            background-color: yellow; /* Sárga fegyver */
+        }
+
+        #restart-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+            background-color: white;
+            padding: 20px;
+            border: 1px solid #ccc;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        #score {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            font-size: 24px;
+            color: white;
+        }
+
+        #best-score {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            font-size: 24px;
+            color: white;
+        }
+    </style>
+    <title>Lövöldözős Játék</title>
+</head>
+<body>
+
+<div id="player" class="game-element"></div>
+<div id="weapon" class="game-element"></div>
+<div id="restart-modal">
+    <p>Meghaltál! Szeretnéd újra kezdeni a játékot?</p>
+    <button onclick="restartGame()">OK</button>
+</div>
+<div id="score">Pontszám: <span id="score-value">0</span></div>
+<div id="best-score">Best rekord: <span id="best-score-value">0</span></div>
+
+<script>
+    const player = document.getElementById('player');
+    const weapon = document.getElementById('weapon');
+    const bullets = [];
+    const enemies = [];
+    let isPlayerAlive = true;
+    let score = 0;
+    let bestScore = 0;
+
+    document.addEventListener('mousemove', (event) => {
+        // Mozgás az egérrel
+        if (!isPlayerAlive) return; // Ha a játékos már meghalt, ne lehessen mozogni
+        player.style.left = `${event.clientX - player.clientWidth / 2}px`;
+        player.style.top = `${event.clientY - player.clientHeight / 2}px`;
+
+        // Pozícionáljuk a fegyvert a játékos jobb oldalán, kicsit kijjebb
+        weapon.style.left = `${player.offsetLeft + player.clientWidth}px`;
+        weapon.style.top = `${player.offsetTop + player.clientHeight / 2 - weapon.clientHeight / 2}px`;
+    });
+
+    document.addEventListener('click', () => {
+        // Lövés egérkattintással
+        if (isPlayerAlive) {
+            shoot();
+        }
+    });
+
+    function shoot() {
+        const bullet = createBullet();
+        bullets.push(bullet);
+        document.body.appendChild(bullet);
+
+        const bulletInterval = setInterval(() => {
+            bullet.style.top = `${bullet.offsetTop - 5}px`;
+
+            // Ellenőrizzük, hogy a lövedék kiment-e a képernyőről
+            if (bullet.offsetTop < 0) {
+                clearInterval(bulletInterval);
+                document.body.removeChild(bullet);
+                bullets.splice(bullets.indexOf(bullet), 1);
+            }
+
+            // Ellenőrizzük, hogy ütközött-e az ellenséggel
+            enemies.forEach((enemy) => {
+                if (checkCollision(bullet, enemy)) {
+                    clearInterval(bulletInterval);
+                    document.body.removeChild(bullet);
+                    bullets.splice(bullets.indexOf(bullet), 1);
+
+                    document.body.removeChild(enemy);
+                    enemies.splice(enemies.indexOf(enemy), 1);
+
+                    // Hozz létre egy új ellenséget
+                    createEnemy();
+
+                    // Növeld a pontszámot
+                    updateScore(1);
+                }
+            });
+        }, 16);
+    }
+
+    function createBullet() {
+        const bullet = document.createElement('div');
+        bullet.className = 'bullet game-element';
+        bullet.style.left = `${weapon.offsetLeft + weapon.clientWidth / 2 - 5}px`;
+        bullet.style.top = `${weapon.offsetTop - 20}px`;
+        return bullet;
+    }
+
+    function createEnemy() {
+        const enemy = document.createElement('div');
+        enemy.className = 'enemy game-element';
+        enemy.style.left = `${Math.random() * (window.innerWidth - 40)}px`;
+        enemy.style.top = '0';
+        document.body.appendChild(enemy);
+        enemies.push(enemy);
+
+        const enemyMoveInterval = setInterval(() => {
+            // Ellenőrizzük, hogy az ellenség leért-e a játékosig
+            if (enemy.offsetTop > window.innerHeight) {
+                clearInterval(enemyMoveInterval);
+                document.body.removeChild(enemy);
+                enemies.splice(enemies.indexOf(enemy), 1);
+
+                // Hozz létre egy új ellenséget
+                createEnemy();
+            } else {
+                // Mozgás az ellenséggel a játékos felé
+                const angle = Math.atan2(player.offsetTop - enemy.offsetTop, player.offsetLeft - enemy.offsetLeft);
+                const speed = 2;
+                const dx = speed * Math.cos(angle);
+                const dy = speed * Math.sin(angle);
+
+                enemy.style.left = `${enemy.offsetLeft + dx}px`;
+                enemy.style.top = `${enemy.offsetTop + dy}px`;
+
+                // Ellenőrizzük, hogy ütközött-e az ellenség a játékossal
+                if (checkCollision(player, enemy)) {
+                    clearInterval(enemyMoveInterval);
+                    handlePlayerDeath();
+                }
+            }
+        }, 16);
+    }
+
+    // Hozz létre kezdeti ellenségeket
+    for (let i = 0; i < 3; i++) {
+        createEnemy();
+    }
+
+    // Új ellenségek spawnolása időről időre
+    setInterval(() => {
+        if (isPlayerAlive) {
+            createEnemy();
+        }
+    }, 3000); // Új ellenségek spawnolása 3 másodpercenként
+
+    function handlePlayerDeath() {
+        isPlayerAlive = false;
+
+        // Ellenőrzi a best rekordot
+        if (score > bestScore) {
+            bestScore = score;
+            document.getElementById('best-score-value').innerText = bestScore;
+        }
+
+        // Mutasd meg a modal-t
+        document.getElementById('restart-modal').style.display = 'block';
+    }
+
+    function restartGame() {
+        // Rejtsd el a modal-t
+        document.getElementById('restart-modal').style.display = 'none';
+
+        // Állítsd vissza a játékost az eredeti pozíciójába
+        player.style.left = '50%';
+        player.style.top = '50%';
+
+        // Töröld az ellenségeket, a lövedékeket és a fegyvert
+        enemies.forEach((enemy) => {
+            document.body.removeChild(enemy);
+        });
+        enemies.length = 0;
+
+        bullets.forEach((bullet) => {
+            document.body.removeChild(bullet);
+        });
+        bullets.length = 0;
+
+        // Állítsd vissza a játék állapotát élőre és a pontszámot nullára
+        isPlayerAlive = true;
+        score = 0;
+        updateScore(0);
+
+        // Hozz létre kezdeti ellenségeket
+        for (let i = 0; i < 3; i++) {
+            createEnemy();
+        }
+    }
+
+    function updateScore(value) {
+        score += value;
+        document.getElementById('score-value').innerText = score;
+    }
+
+    function checkCollision(element1, element2) {
+        const rect1 = element1.getBoundingClientRect();
+        const rect2 = element2.getBoundingClientRect();
+        return (
+            rect1.left < rect2.right &&
+            rect1.right > rect2.left &&
+            rect1.top < rect2.bottom &&
+            rect1.bottom > rect2.top
+        );
+    }
+
+</script>
+
+</body>
+</html>
